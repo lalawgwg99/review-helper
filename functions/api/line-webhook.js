@@ -7,11 +7,13 @@ export async function onRequestPost({ request, env }) {
   if (!env.DB) return json({ error: 'db_not_bound' }, 500);
   await ensureSchema(env.DB);
   const bodyText = await request.text();
-  if (env.LINE_CHANNEL_SECRET) {
-    const sig = request.headers.get('x-line-signature') || '';
-    if (!(await verifySig(bodyText, env.LINE_CHANNEL_SECRET, sig))) {
-      return json({ error: 'bad_signature' }, 401);
-    }
+  // 正式環境一定要設 LINE_CHANNEL_SECRET 才能驗簽，沒設就直接拒絕（fail closed）
+  if (!env.LINE_CHANNEL_SECRET) {
+    return json({ error: 'webhook_not_configured' }, 503);
+  }
+  const sig = request.headers.get('x-line-signature') || '';
+  if (!(await verifySig(bodyText, env.LINE_CHANNEL_SECRET, sig))) {
+    return json({ error: 'bad_signature' }, 401);
   }
   let events = [];
   try {
