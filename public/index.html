@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>評論小幫手</title>
+<style>
+  :root { --blue: #1565d8; --blue-light: #e8f1fd; --ink: #1a1a1a; --muted: #6b7280; --line: #e5e7eb; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; color: var(--ink); background: #fff; font-size: 16px; line-height: 1.6; }
+  header { position: sticky; top: 0; background: #fff; border-bottom: 1px solid var(--line); padding: 12px 16px; z-index: 10; }
+  header h1 { margin: 0; font-size: 19px; font-weight: 700; }
+  header h1 .badge { display: inline-block; background: var(--blue); color: #fff; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 1px 10px; margin-left: 8px; vertical-align: 2px; }
+  header p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+  .tabs { display: flex; gap: 8px; padding: 12px 16px 0; }
+  .tabs button { flex: 1; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 0; font-size: 15px; color: var(--ink); cursor: pointer; }
+  .tabs button.active { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600; }
+  #list { padding: 12px 16px 40px; display: flex; flex-direction: column; gap: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .card .meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .card .author { font-weight: 700; font-size: 16px; }
+  .card .stars { color: #f5a623; letter-spacing: 1px; }
+  .card .date { color: var(--muted); font-size: 13px; margin-left: auto; }
+  .card .body { margin: 8px 0 0; font-size: 15px; }
+  .card .body.none { color: var(--muted); }
+  .card .photo-tag { display: inline-block; font-size: 12px; color: var(--blue); background: var(--blue-light); border-radius: 6px; padding: 1px 8px; margin-top: 6px; }
+  .card label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  .card textarea { width: 100%; min-height: 96px; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 15px; font-family: inherit; line-height: 1.6; resize: vertical; }
+  .card textarea:focus { outline: 2px solid var(--blue-light); border-color: var(--blue); }
+  .row { display: flex; gap: 8px; margin-top: 10px; }
+  .btn { flex: 1; border-radius: 10px; padding: 10px 0; font-size: 15px; cursor: pointer; border: 1px solid var(--blue); }
+  .btn.primary { background: var(--blue); color: #fff; font-weight: 600; }
+  .btn.ghost { background: #fff; color: var(--blue); }
+  .btn.done { background: #fff; color: var(--muted); border-color: var(--line); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 15px; }
+  details.settings { margin: 0 16px 24px; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  details.settings summary { font-weight: 700; font-size: 16px; cursor: pointer; }
+  details.settings .field { margin-top: 10px; }
+  details.settings .field span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  details.settings input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; font-size: 15px; font-family: inherit; }
+  details.settings .save { margin-top: 12px; width: 100%; background: var(--blue); color: #fff; border: none; border-radius: 10px; padding: 11px 0; font-size: 16px; font-weight: 600; cursor: pointer; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>評論小幫手<span class="badge" id="pendingBadge">0 待回覆</span></h1>
+  <p id="storeLine">載入中…</p>
+</header>
+
+<div class="tabs">
+  <button id="tabPending" class="active">待回覆</button>
+  <button id="tabAll">全部</button>
+</div>
+
+<details class="settings">
+  <summary>商家設定</summary>
+  <div class="field"><span>店名</span><input id="set_store_name"></div>
+  <div class="field"><span>客服電話</span><input id="set_service_phone"></div>
+  <div class="field"><span>回覆語氣</span><input id="set_tone"></div>
+  <div class="field"><span>署名</span><input id="set_signature"></div>
+  <div class="field"><span>管理密碼（寫入用，存在這支手機瀏覽器）</span><input id="adminSecret" type="password" placeholder="INGEST_SECRET"></div>
+  <button class="save" id="saveSettings">儲存設定</button>
+  <div class="hint">AI 回覆建議由小幫手自動產生後寫入，低分評論請務必人工看過再發佈到 Google。</div>
+</details>
+
+<div id="list"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let filter = 'pending';
+const secret = () => localStorage.getItem('rh_secret') || '';
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  const s = secret();
+  if (s && (opts.method === 'POST')) headers['x-ingest-secret'] = s;
+  const res = await fetch(path, { ...opts, headers });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+function stars(n) { return '★'.repeat(n) + '☆'.repeat(5 - n); }
+
+function card(r) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.innerHTML = `
+    <div class="meta">
+      <span class="author"></span>
+      <span class="stars">${stars(r.stars)}</span>
+      <span class="date"></span>
+    </div>
+    <p class="body ${r.body ? '' : 'none'}"></p>
+    ${r.has_photo ? '<span class="photo-tag">有附照片</span>' : ''}
+    <label>AI 回覆建議</label>
+    <textarea placeholder="尚無建議，等待小幫手產生…"></textarea>
+    <div class="row">
+      <button class="btn ghost" data-act="copy">複製</button>
+      <button class="btn primary" data-act="save">儲存建議</button>
+      <button class="btn ${r.replied_at ? 'done' : 'primary'}" data-act="toggle">${r.replied_at ? '改回待回覆' : '標記已回覆'}</button>
+    </div>`;
+  el.querySelector('.author').textContent = r.author;
+  el.querySelector('.date').textContent = r.seen_label || '';
+  el.querySelector('.body').textContent = r.body || '（僅評分，無文字）';
+  const ta = el.querySelector('textarea');
+  ta.value = r.suggestion || '';
+  el.querySelector('[data-act="copy"]').onclick = async () => {
+    await navigator.clipboard.writeText(ta.value || '');
+    alert(ta.value ? '已複製' : '沒有內容可複製');
+  };
+  el.querySelector('[data-act="save"]').onclick = async () => {
+    if (!secret()) return alert('請先在商家設定輸入管理密碼');
+    await api('/api/suggest', { method: 'POST', body: JSON.stringify({ review_id: r.id, suggestion: ta.value }) });
+    alert('已儲存');
+  };
+  el.querySelector('[data-act="toggle"]').onclick = async () => {
+    if (!secret()) return alert('請先在商家設定輸入管理密碼');
+    await api('/api/mark-replied', { method: 'POST', body: JSON.stringify({ review_id: r.id, replied: !r.replied_at }) });
+    load();
+  };
+  return el;
+}
+
+async function load() {
+  try {
+    const [rev, set] = await Promise.all([api('/api/reviews?filter=' + filter), api('/api/settings')]);
+    $('pendingBadge').textContent = rev.pending_count + ' 待回覆';
+    $('storeLine').textContent = (set.settings.store_name || '') + '・新評論自動偵測中';
+    const list = $('list');
+    list.innerHTML = '';
+    if (!rev.reviews.length) {
+      list.innerHTML = '<div class="empty">目前沒有評論，乾淨溜溜。</div>';
+      return;
+    }
+    for (const r of rev.reviews) list.appendChild(card(r));
+  } catch (e) {
+    $('list').innerHTML = '<div class="empty">載入失敗：' + e.message + '</div>';
+  }
+}
+
+async function loadSettings() {
+  try {
+    const { settings } = await api('/api/settings');
+    for (const k of ['store_name', 'service_phone', 'tone', 'signature']) {
+      if (settings[k]) $('set_' + k).value = settings[k];
+    }
+  } catch {}
+  $('adminSecret').value = secret();
+}
+
+$('tabPending').onclick = () => { filter = 'pending'; $('tabPending').classList.add('active'); $('tabAll').classList.remove('active'); load(); };
+$('tabAll').onclick = () => { filter = 'all'; $('tabAll').classList.add('active'); $('tabPending').classList.remove('active'); load(); };
+$('saveSettings').onclick = async () => {
+  const settings = {};
+  for (const k of ['store_name', 'service_phone', 'tone', 'signature']) settings[k] = $('set_' + k).value;
+  await api('/api/settings', { method: 'POST', body: JSON.stringify({ settings }) });
+  localStorage.setItem('rh_secret', $('adminSecret').value.trim());
+  alert('已儲存');
+  load();
+};
+
+loadSettings();
+load();
+</script>
+</body>
+</html>
