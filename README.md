@@ -36,6 +36,22 @@ Google 新評論自動偵測＋AI 回覆建議。先做**自用版**（萬家福
 - 150 字內、繁體中文，結尾署名（設定頁可改）
 - **鐵律：1–2 星一律人工審核後才能發，AI 只給建議**
 
+## LINE 群組推播設定
+
+1. 到 developers.line.biz，用你的 LINE 帳號登入
+2. Create provider（取名如「評論小幫手」）→ Create channel → Messaging API，基本資料隨便填
+3. 進 channel → Messaging API 分頁 → 發行 **Channel access token（長期）**，複製起來
+4. 把這個官方帳號加為好友，**拉進你要推播的 LINE 群組**
+5. 同一頁往下找到 Webhook settings：URL 填 `https://<你的Pages網址>/api/line-webhook`，開啟 **Use webhook**
+6. 在群組裡講一句話（隨便什麼都行），系統會記下群組 ID
+7. Cloudflare Pages → Settings → Environment Variables，新增：
+   - `LINE_CHANNEL_ACCESS_TOKEN`＝步驟 3 的 token
+   - `LINE_CHANNEL_SECRET`＝channel 的 Channel secret（在 Basic settings）
+   - （`INGEST_SECRET` 沿用之前那組）
+8. 重部署一次。偵測到新評論後，助理會呼叫 `/api/notify` 推到群組
+
+注意：LINE 官方帳號每月免費推播 200 則，五甲店一個月約 30 則評論，夠用。
+
 ## API
 
 | 方法 | 路徑 | 說明 |
