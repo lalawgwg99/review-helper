@@ -1,5 +1,5 @@
-// GET /api/settings — 讀商家設定；POST — 寫入（後台用，自用版不設密碼，販售版再加）
-import { ensureSchema, json } from '../lib.js';
+// GET /api/settings — 讀商家設定；POST — 寫入（需 x-ingest-secret）
+import { ensureSchema, checkSecret, json } from '../lib.js';
 
 export async function onRequestGet({ env }) {
   if (!env.DB) return json({ error: 'db_not_bound' }, 500);
@@ -12,6 +12,7 @@ export async function onRequestGet({ env }) {
 
 export async function onRequestPost({ request, env }) {
   if (!env.DB) return json({ error: 'db_not_bound' }, 500);
+  if (!checkSecret(request, env)) return json({ error: 'unauthorized' }, 401);
   await ensureSchema(env.DB);
   let payload;
   try {
