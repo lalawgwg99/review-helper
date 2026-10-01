@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS line_sources (
+  source_id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  last_seen TEXT DEFAULT (datetime('now','+8 hours'))
+);
 INSERT OR IGNORE INTO settings (key, value) VALUES
   ('store_name', '萬家福量販 五甲店'),
   ('service_phone', '0800-567-788'),
