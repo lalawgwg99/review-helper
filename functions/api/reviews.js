@@ -9,7 +9,7 @@ export async function onRequestGet({ request, env }) {
   const where = filter === 'pending' ? 'WHERE r.replied_at IS NULL' : '';
   const { results } = await env.DB.prepare(
     `SELECT r.id, r.author, r.stars, r.seen_label, r.body, r.has_photo, r.owner_replied,
-            r.created_at, r.replied_at, s.suggestion
+            r.created_at, r.replied_at, s.suggestion, s.reviewed_at
      FROM reviews r LEFT JOIN suggestions s ON s.review_id = r.id
      ${where}
      ORDER BY r.id DESC LIMIT 200`

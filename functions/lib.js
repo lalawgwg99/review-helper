@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   review_id INTEGER NOT NULL UNIQUE,
   suggestion TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now','+8 hours')),
+  reviewed_at TEXT,
   FOREIGN KEY(review_id) REFERENCES reviews(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS settings (

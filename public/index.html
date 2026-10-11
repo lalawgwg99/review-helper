@@ -32,6 +32,10 @@
   .btn.primary { background: var(--blue); color: #fff; font-weight: 600; }
   .btn.ghost { background: #fff; color: var(--blue); }
   .btn.done { background: #fff; color: var(--muted); border-color: var(--line); }
+  .btn.warn { background: #d93025; border-color: #d93025; color: #fff; font-weight: 600; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .reviewed-tag { display: inline-block; font-size: 12px; color: #1a7f37; background: #e6f4ea; border-radius: 6px; padding: 1px 8px; margin-top: 6px; }
+  .review-hint { font-size: 12px; color: #d93025; margin-top: 6px; }
   .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 15px; }
   details.settings { margin: 0 16px 24px; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
   details.settings summary { font-weight: 700; font-size: 16px; cursor: pointer; }
@@ -76,7 +80,11 @@ async function api(path, opts = {}) {
   const s = secret();
   if (s && (opts.method === 'POST')) headers['x-ingest-secret'] = s;
   const res = await fetch(path, { ...opts, headers });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
+  if (!res.ok) {
+    let detail = '';
+    try { const d = await res.json(); detail = d.error || ''; } catch {}
+    throw new Error('HTTP ' + res.status + (detail ? '（' + detail + '）' : ''));
+  }
   return res.json();
 }
 
@@ -85,6 +93,8 @@ function stars(n) { return '★'.repeat(n) + '☆'.repeat(5 - n); }
 function card(r) {
   const el = document.createElement('div');
   el.className = 'card';
+  const reviewed = !!r.reviewed_at;
+  const needsReview = r.stars <= 2 && !reviewed;
   el.innerHTML = `
     <div class="meta">
       <span class="author"></span>
@@ -95,11 +105,17 @@ function card(r) {
     ${r.has_photo ? '<span class="photo-tag">有附照片</span>' : ''}
     <label>AI 回覆建議</label>
     <textarea placeholder="尚無建議，等待小幫手產生…"></textarea>
+    ${reviewed ? `<div><span class="reviewed-tag">已審核通過・${r.reviewed_at}</span></div>` : ''}
     <div class="row">
       <button class="btn ghost" data-act="copy">複製</button>
       <button class="btn primary" data-act="save">儲存建議</button>
       <button class="btn ${r.replied_at ? 'done' : 'primary'}" data-act="toggle">${r.replied_at ? '改回待回覆' : '標記已回覆'}</button>
-    </div>`;
+    </div>
+    ${r.suggestion ? `
+    <div class="row">
+      <button class="btn ${reviewed ? 'done' : (needsReview ? 'warn' : 'ghost')}" data-act="review" ${reviewed ? 'disabled' : ''}>${reviewed ? '已審核通過' : '審核通過'}</button>
+    </div>
+    ${needsReview ? '<div class="review-hint">低分評論需人工審核後才會推播到 LINE</div>' : ''}` : ''}`;
   el.querySelector('.author').textContent = r.author;
   el.querySelector('.date').textContent = r.seen_label || '';
   el.querySelector('.body').textContent = r.body || '（僅評分，無文字）';
@@ -118,6 +134,16 @@ function card(r) {
     if (!secret()) return alert('請先在商家設定輸入管理密碼');
     await api('/api/mark-replied', { method: 'POST', body: JSON.stringify({ review_id: r.id, replied: !r.replied_at }) });
     load();
+  };
+  const reviewBtn = el.querySelector('[data-act="review"]');
+  if (reviewBtn) reviewBtn.onclick = async () => {
+    if (!secret()) return alert('請先在商家設定輸入管理密碼');
+    try {
+      await api('/api/reviewed', { method: 'POST', body: JSON.stringify({ review_id: r.id }) });
+      load();
+    } catch (e) {
+      alert('審核失敗：' + e.message);
+    }
   };
   return el;
 }
